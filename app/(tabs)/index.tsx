@@ -18,7 +18,7 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome! Rizki Aulia Nata Saputra-23050755-kelas-kronjo</ThemedText>
+        <ThemedText type="title">Welcome! Rizki Aulia Nata Saputra-23050755-kelas-kronjoo</ThemedText>
         <HelloWave />
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
