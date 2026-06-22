@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,38 +6,34 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const submissions = [
-  {
-    id: 1,
-    title: 'Aplikasi Todo-List dengan DOM JavaScript',
-    submittedAt: '12 Jun 2026',
-    status: 'review',
-    xp: 200,
-    feedback: '',
-  },
-  {
-    id: 2,
-    title: 'Landing Page Sederhana',
-    submittedAt: '8 Jun 2026',
-    status: 'approved',
-    xp: 150,
-    feedback: 'Bagus! Coba tambahkan animasi pada tombol.',
-  },
-  {
-    id: 3,
-    title: 'Kalkulator Sederhana',
-    submittedAt: '1 Jun 2026',
-    status: 'revision',
-    xp: 100,
-    feedback: 'Ada bug pada operasi pembagian. Perbaiki dan kirim ulang.',
-  },
-];
+import { projectApi, Submission } from '@/src/api/project.api';
 
 export default function SubmissionsScreen() {
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSubmissions();
+  }, []);
+
+  const loadSubmissions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await projectApi.getSubmissions();
+      setSubmissions(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat riwayat pengumpulan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const statusIcon = (status: string) => {
     switch (status) {
       case 'review': return { icon: 'clock-outline', color: '#F59E0B' };
@@ -55,6 +51,44 @@ export default function SubmissionsScreen() {
       default: return status;
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Riwayat Pengumpulan</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Riwayat Pengumpulan</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadSubmissions}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -74,12 +108,16 @@ export default function SubmissionsScreen() {
                 <View style={[styles.statusDot, { backgroundColor: si.color }]} />
                 <Text style={[styles.statusLabel, { color: si.color }]}>{statusLabel(sub.status)}</Text>
               </View>
-              <Text style={styles.subTitle}>{sub.title}</Text>
+              <Text style={styles.subTitle}>{sub.project_title || 'Proyek'}</Text>
               <View style={styles.subMeta}>
                 <MaterialCommunityIcons name="calendar" size={14} color="#64748B" />
-                <Text style={styles.subMetaText}>{sub.submittedAt}</Text>
-                <MaterialCommunityIcons name="sword-cross" size={14} color="#F59E0B" />
-                <Text style={styles.subMetaText}>+{sub.xp} XP</Text>
+                <Text style={styles.subMetaText}>{sub.submitted_at}</Text>
+                {sub.xp_reward && (
+                  <>
+                    <MaterialCommunityIcons name="sword-cross" size={14} color="#F59E0B" />
+                    <Text style={styles.subMetaText}>+{sub.xp_reward} XP</Text>
+                  </>
+                )}
               </View>
               {sub.feedback && (
                 <View style={styles.feedbackCard}>

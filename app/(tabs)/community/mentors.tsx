@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,50 +6,72 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const mentors = [
-  {
-    id: 1,
-    name: 'Ahmad Riza',
-    role: 'Senior Frontend Engineer',
-    expertise: ['React', 'TypeScript', 'CSS'],
-    students: 234,
-    rating: 4.9,
-    available: true,
-  },
-  {
-    id: 2,
-    name: 'Diana Putri',
-    role: 'UI/UX Designer',
-    expertise: ['Figma', 'Design System', 'Prototyping'],
-    students: 189,
-    rating: 4.8,
-    available: false,
-  },
-  {
-    id: 3,
-    name: 'Budi Santoso',
-    role: 'Backend Developer',
-    expertise: ['Node.js', 'PostgreSQL', 'AWS'],
-    students: 156,
-    rating: 4.7,
-    available: true,
-  },
-  {
-    id: 4,
-    name: 'Citra Lestari',
-    role: 'Mobile Developer',
-    expertise: ['React Native', 'Flutter', 'Firebase'],
-    students: 201,
-    rating: 4.9,
-    available: true,
-  },
-];
+import { communityApi, Mentor } from '@/src/api/community.api';
 
 export default function MentorsScreen() {
+  const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadMentors();
+  }, []);
+
+  const loadMentors = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await communityApi.getMentors();
+      setMentors(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat mentor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Mentor</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Mentor</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadMentors}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>

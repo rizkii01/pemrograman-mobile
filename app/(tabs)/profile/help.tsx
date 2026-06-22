@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,21 +6,72 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
-  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const faqs = [
-  { q: 'Bagaimana cara memulai kursus?', a: 'Pilih kursus dari halaman Home atau Library, lalu klik "Mulai Belajar" untuk mengakses materi pertama.' },
-  { q: 'Apakah sertifikat bisa diunduh?', a: 'Ya, sertifikat bisa diunduh dalam format PDF setelah menyelesaikan 100% materi kursus.' },
-  { q: 'Bagaimana cara mengumpulkan tugas?', a: 'Buka tab Projects, pilih tugas yang aktif, lalu klik "Kumpulkan Proyek" dan unggah link hasil kerja kamu.' },
-  { q: 'Berapa lama waktu review tugas?', a: 'Mentor akan mereview tugas dalam 1-3 hari kerja. Kamu akan mendapat notifikasi setelah selesai.' },
-  { q: 'Apakah aplikasi ini gratis?', a: 'Ya, semua materi dasar bisa diakses gratis. Ada opsi premium untuk fitur tambahan seperti konsultasi mentor.' },
-];
+import { libraryApi, Faq } from '@/src/api/library.api';
 
 export default function HelpScreen() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadFaqs();
+  }, []);
+
+  const loadFaqs = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await libraryApi.getFaqs();
+      setFaqs(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat FAQ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Pusat Bantuan</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Pusat Bantuan</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadFaqs}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -39,13 +90,13 @@ export default function HelpScreen() {
         <Text style={styles.sectionTitle}>FAQ</Text>
         {faqs.map((faq, i) => (
           <TouchableOpacity
-            key={i}
+            key={faq.id || i}
             style={styles.faqCard}
             onPress={() => setOpenIndex(openIndex === i ? null : i)}
             activeOpacity={0.8}
           >
             <View style={styles.faqHeader}>
-              <Text style={styles.faqQuestion}>{faq.q}</Text>
+              <Text style={styles.faqQuestion}>{faq.question}</Text>
               <MaterialCommunityIcons
                 name={openIndex === i ? 'chevron-up' : 'chevron-down'}
                 size={20}
@@ -53,7 +104,7 @@ export default function HelpScreen() {
               />
             </View>
             {openIndex === i && (
-              <Text style={styles.faqAnswer}>{faq.a}</Text>
+              <Text style={styles.faqAnswer}>{faq.answer}</Text>
             )}
           </TouchableOpacity>
         ))}

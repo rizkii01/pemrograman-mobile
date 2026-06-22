@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,27 +7,43 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const allResources = [
-  { id: 1, title: 'Belajar HTML dalam 1 Jam', type: 'Ebook', color: '#38BDF8' },
-  { id: 2, title: 'CSS Cheatsheet Lengkap', type: 'PDF', color: '#A78BFA' },
-  { id: 3, title: 'JavaScript: The Good Parts', type: 'Ebook', color: '#F59E0B' },
-  { id: 4, title: 'React Native Documentation', type: 'Link', color: '#10B981' },
-  { id: 5, title: 'Desain Sistem Figma Kit', type: 'File', color: '#EC4899' },
-  { id: 6, title: 'API Testing dengan Postman', type: 'Guide', color: '#06B6D4' },
-  { id: 7, title: 'TypeScript Handbook', type: 'Ebook', color: '#3B82F6' },
-  { id: 8, title: 'Node.js Best Practices', type: 'Guide', color: '#84CC16' },
-];
+import { libraryApi, Resource } from '@/src/api/library.api';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
 
-  const filtered = allResources.filter(
-    (r) => r.title.toLowerCase().includes(query.toLowerCase())
-  );
+  useEffect(() => {
+    if (query.length > 0) {
+      const timeout = setTimeout(() => {
+        performSearch(query);
+      }, 500);
+      return () => clearTimeout(timeout);
+    } else {
+      setResults([]);
+      setSearched(false);
+    }
+  }, [query]);
+
+  const performSearch = async (q: string) => {
+    try {
+      setLoading(true);
+      const data = await libraryApi.search(q);
+      setResults(data);
+      setSearched(true);
+    } catch {
+      setResults([]);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -53,17 +69,22 @@ export default function SearchScreen() {
         </View>
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {query.length > 0 ? (
-          filtered.length > 0 ? (
-            filtered.map((item) => (
+        {loading ? (
+          <View style={{ paddingVertical: 60, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#38BDF8" />
+            <Text style={{ color: '#94A3B8', marginTop: 12 }}>Mencari...</Text>
+          </View>
+        ) : query.length > 0 ? (
+          searched && results.length > 0 ? (
+            results.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.resultCard}
                 activeOpacity={0.8}
                 onPress={() => router.push(`/(tabs)/library/${item.id}`)}
               >
-                <View style={[styles.resultIcon, { backgroundColor: item.color + '20' }]}>
-                  <MaterialCommunityIcons name="file-document-outline" size={20} color={item.color} />
+                <View style={[styles.resultIcon, { backgroundColor: (item.color || '#38BDF8') + '20' }]}>
+                  <MaterialCommunityIcons name="file-document-outline" size={20} color={item.color || '#38BDF8'} />
                 </View>
                 <View style={styles.resultInfo}>
                   <Text style={styles.resultTitle}>{item.title}</Text>
@@ -72,12 +93,12 @@ export default function SearchScreen() {
                 <MaterialCommunityIcons name="chevron-right" size={20} color="#475569" />
               </TouchableOpacity>
             ))
-          ) : (
+          ) : searched ? (
             <View style={styles.noResults}>
               <MaterialCommunityIcons name="file-search-outline" size={48} color="#334155" />
-              <Text style={styles.noResultsText}>Tidak ditemukan untuk "{query}"</Text>
+              <Text style={styles.noResultsText}>Tidak ditemukan untuk &quot;{query}&quot;</Text>
             </View>
-          )
+          ) : null
         ) : (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons name="magnify" size={48} color="#334155" />

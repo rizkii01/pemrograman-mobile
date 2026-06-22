@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   StyleSheet,
   View,
@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { userApi, UserProfile, UserStats } from '@/src/api/user.api';
+import { AuthContext } from '@/src/context/AuthContext';
 
 interface MenuLinkProps {
   icon: string;
@@ -28,6 +31,62 @@ const MenuLink: React.FC<MenuLinkProps> = ({ icon, label, onPress, color = '#94A
 );
 
 export default function ProfileScreen() {
+  const { logout } = useContext(AuthContext);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [profileData, statsData] = await Promise.all([
+        userApi.getProfile(),
+        userApi.getStats(),
+      ]);
+      setProfile(profileData);
+      setStats(statsData);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat profil');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.replace('/login');
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadProfile}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -40,29 +99,29 @@ export default function ProfileScreen() {
               <MaterialCommunityIcons name="pencil" size={14} color="#0F172A" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.name}>Rizki Pratama</Text>
-          <Text style={styles.email}>rizki@example.com</Text>
+          <Text style={styles.name}>{profile?.name || '-'}</Text>
+          <Text style={styles.email}>{profile?.email || '-'}</Text>
           <View style={styles.levelBadge}>
             <MaterialCommunityIcons name="star" size={14} color="#F59E0B" />
-            <Text style={styles.levelText}>Intermediate</Text>
+            <Text style={styles.levelText}>{profile?.level || '-'}</Text>
           </View>
         </View>
 
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>12</Text>
+            <Text style={styles.statNumber}>{stats?.courses ?? 0}</Text>
             <Text style={styles.statLabel}>Kursus</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>5</Text>
+            <Text style={styles.statNumber}>{stats?.projects ?? 0}</Text>
             <Text style={styles.statLabel}>Proyek</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>8</Text>
+            <Text style={styles.statNumber}>{stats?.certificates ?? 0}</Text>
             <Text style={styles.statLabel}>Sertifikat</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statNumber}>4.2K</Text>
+            <Text style={styles.statNumber}>{stats?.xp ?? 0}</Text>
             <Text style={styles.statLabel}>XP</Text>
           </View>
         </View>
@@ -77,7 +136,7 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={styles.logoutBtn}
-          onPress={() => router.replace('/login')}
+          onPress={handleLogout}
         >
           <MaterialCommunityIcons name="logout" size={20} color="#EF4444" />
           <Text style={styles.logoutText}>Keluar</Text>

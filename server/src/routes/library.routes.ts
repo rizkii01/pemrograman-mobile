@@ -1,0 +1,24 @@
+import { Router } from 'express';
+import * as ctrl from '../controllers/library.controller';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+router.get('/resources', ctrl.getResources);
+router.get('/resources/search', ctrl.searchResources);
+router.get('/resources/:id', ctrl.getResourceById);
+router.post('/resources', authMiddleware, ctrl.createResource);
+router.put('/resources/:id', authMiddleware, ctrl.updateResource);
+router.delete('/resources/:id', authMiddleware, ctrl.deleteResource);
+router.get('/categories', ctrl.getCategories);
+router.post('/categories', authMiddleware, ctrl.createCategory);
+router.put('/categories/:id', authMiddleware, ctrl.updateCategory);
+router.delete('/categories/:id', authMiddleware, ctrl.deleteCategory);
+router.get('/bookmarks', authMiddleware, ctrl.getBookmarks);
+router.post('/bookmarks', authMiddleware, ctrl.addBookmark);
+router.delete('/bookmarks/:id', authMiddleware, ctrl.removeBookmark);
+router.get('/achievements', authMiddleware, ctrl.getAchievements);
+router.get('/faqs', ctrl.getFaqs);
+router.post('/faqs', authMiddleware, ctrl.createFaq);
+router.put('/faqs/:id', authMiddleware, ctrl.updateFaq);
+router.delete('/faqs/:id', authMiddleware, ctrl.deleteFaq);
+export default router;

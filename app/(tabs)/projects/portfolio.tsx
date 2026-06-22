@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,36 +6,72 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
-  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const portfolioItems = [
-  {
-    id: 1,
-    title: 'Landing Page Responsive',
-    desc: 'HTML & CSS',
-    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=300&fit=crop',
-    xp: 150,
-  },
-  {
-    id: 2,
-    title: 'Todo List App',
-    desc: 'JavaScript DOM',
-    image: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=400&h=300&fit=crop',
-    xp: 200,
-  },
-  {
-    id: 3,
-    title: 'Kalkulator Sederhana',
-    desc: 'JavaScript',
-    image: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=400&h=300&fit=crop',
-    xp: 100,
-  },
-];
+import { projectApi, Portfolio } from '@/src/api/project.api';
 
 export default function PortfolioScreen() {
+  const [portfolioItems, setPortfolioItems] = useState<Portfolio[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadPortfolio();
+  }, []);
+
+  const loadPortfolio = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await projectApi.getPortfolio();
+      setPortfolioItems(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat portofolio');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Portofolio Saya</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Portofolio Saya</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadPortfolio}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -57,10 +93,10 @@ export default function PortfolioScreen() {
             </View>
             <View style={styles.cardContent}>
               <Text style={styles.cardTitle}>{item.title}</Text>
-              <Text style={styles.cardDesc}>{item.desc}</Text>
+              <Text style={styles.cardDesc}>{item.description}</Text>
               <View style={styles.cardMeta}>
                 <MaterialCommunityIcons name="sword-cross" size={14} color="#F59E0B" />
-                <Text style={styles.cardXp}>+{item.xp} XP</Text>
+                <Text style={styles.cardXp}>+{item.xp_reward} XP</Text>
               </View>
             </View>
           </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,24 +6,76 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-
-const resourceData: Record<string, { title: string; type: string; author: string; desc: string; content: string; color: string }> = {
-  '1': {
-    title: 'Belajar HTML dalam 1 Jam',
-    type: 'Ebook',
-    author: 'SkillUps',
-    desc: 'Panduan cepat belajar HTML untuk pemula. Cocok untuk kamu yang ingin memahami dasar-dasar web development.',
-    color: '#38BDF8',
-    content: 'Ebook ini mencakup:\n\n1. Pengenalan HTML & Struktur Dasar\n2. Tag-Tag Penting (heading, paragraph, link, image)\n3. Semantic HTML5\n4. Form & Input Elements\n5. Multimedia (audio, video)\n6. Tips & Best Practices\n\nFormat: PDF\nHalaman: 45 halaman\nBahasa: Indonesia',
-  },
-};
+import { libraryApi, Resource } from '@/src/api/library.api';
 
 export default function ResourceDetailScreen() {
   const { id } = useLocalSearchParams();
-  const resource = resourceData[id as string] || resourceData['1'];
+  const [resource, setResource] = useState<Resource | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadResource();
+  }, [id]);
+
+  const loadResource = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await libraryApi.getResourceById(Number(id));
+      setResource(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat detail referensi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Detail Referensi</Text>
+          <TouchableOpacity>
+            <MaterialCommunityIcons name="bookmark-outline" size={24} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !resource) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Detail Referensi</Text>
+          <TouchableOpacity>
+            <MaterialCommunityIcons name="bookmark-outline" size={24} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error || 'Referensi tidak ditemukan'}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadResource}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -37,8 +89,8 @@ export default function ResourceDetailScreen() {
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={[styles.heroIcon, { backgroundColor: resource.color + '20' }]}>
-          <MaterialCommunityIcons name="book-open-variant" size={56} color={resource.color} />
+        <View style={[styles.heroIcon, { backgroundColor: (resource.color || '#38BDF8') + '20' }]}>
+          <MaterialCommunityIcons name="book-open-variant" size={56} color={resource.color || '#38BDF8'} />
         </View>
 
         <Text style={styles.title}>{resource.title}</Text>
@@ -47,7 +99,7 @@ export default function ResourceDetailScreen() {
           <View style={styles.metaDot} />
           <Text style={styles.metaText}>{resource.author}</Text>
         </View>
-        <Text style={styles.desc}>{resource.desc}</Text>
+        <Text style={styles.desc}>{resource.description}</Text>
 
         <TouchableOpacity style={styles.downloadBtn}>
           <MaterialCommunityIcons name="download" size={20} color="#0F172A" />

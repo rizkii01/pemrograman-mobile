@@ -1,0 +1,21 @@
+import { Router } from 'express';
+import * as ctrl from '../controllers/community.controller';
+import { authMiddleware } from '../middleware/auth';
+
+const router = Router();
+router.get('/posts', ctrl.getPosts);
+router.get('/posts/:id', ctrl.getPostById);
+router.post('/posts', authMiddleware, ctrl.createPost);
+router.put('/posts/:id', authMiddleware, ctrl.updatePost);
+router.delete('/posts/:id', authMiddleware, ctrl.deletePost);
+router.post('/posts/:id/like', authMiddleware, ctrl.toggleLike);
+router.post('/posts/:id/comments', authMiddleware, ctrl.addComment);
+router.put('/comments/:id', authMiddleware, ctrl.updateComment);
+router.delete('/comments/:id', authMiddleware, ctrl.deleteComment);
+router.get('/leaderboard', ctrl.getLeaderboard);
+router.get('/mentors', ctrl.getMentors);
+router.get('/mentors/:id', ctrl.getMentorById);
+router.post('/mentors', authMiddleware, ctrl.createMentor);
+router.put('/mentors/:id', authMiddleware, ctrl.updateMentor);
+router.delete('/mentors/:id', authMiddleware, ctrl.deleteMentor);
+export default router;

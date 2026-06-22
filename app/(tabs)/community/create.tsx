@@ -7,23 +7,34 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { communityApi } from '@/src/api/community.api';
 
 export default function CreatePostScreen() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [category, setCategory] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const categories = ['Diskusi', 'Tips & Trik', 'Showcase', 'Tanya Jawab', 'Karir'];
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!title || !body || !category) {
       alert('Harap isi semua kolom!');
       return;
     }
-    router.back();
+    try {
+      setSubmitting(true);
+      await communityApi.createPost({ title, body, category });
+      router.back();
+    } catch (err: any) {
+      alert(err.message || 'Gagal memposting diskusi');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -33,8 +44,12 @@ export default function CreatePostScreen() {
           <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Buat Diskusi</Text>
-        <TouchableOpacity style={styles.postBtn} onPress={handlePost}>
-          <Text style={styles.postBtnText}>Kirim</Text>
+        <TouchableOpacity style={[styles.postBtn, submitting && { opacity: 0.6 }]} onPress={handlePost} disabled={submitting}>
+          {submitting ? (
+            <ActivityIndicator size="small" color="#0F172A" />
+          ) : (
+            <Text style={styles.postBtnText}>Kirim</Text>
+          )}
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>

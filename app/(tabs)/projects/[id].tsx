@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,33 +6,72 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-
-const projectData: Record<string, { title: string; desc: string; requirements: string[]; xp: number; tips: string[] }> = {
-  '1': {
-    title: 'Membuat Landing Page Responsive',
-    desc: 'Bangun halaman landing page yang responsif menggunakan HTML semantik dan CSS modern. Halaman harus memiliki navigasi, hero section, fitur, dan footer.',
-    xp: 150,
-    requirements: [
-      'Menggunakan HTML5 semantic tags (header, nav, main, section, footer)',
-      'CSS Flexbox atau Grid untuk layout',
-      'Responsif di mobile (min-width 320px) dan desktop',
-      'Minimal 3 section: Hero, Features, Contact',
-      'Warna dan font yang konsisten',
-    ],
-    tips: [
-      'Gunakan mobile-first approach',
-      'Manfaatkan CSS custom properties untuk warna',
-      'Pastikan aksesibilitas dengan alt text pada gambar',
-    ],
-  },
-};
+import { projectApi, Project } from '@/src/api/project.api';
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
-  const project = projectData[id as string] || projectData['1'];
+  const [project, setProject] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadProject();
+  }, [id]);
+
+  const loadProject = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await projectApi.getById(Number(id));
+      setProject(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat detail proyek');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Detail Proyek</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Detail Proyek</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error || 'Proyek tidak ditemukan'}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadProject}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -46,10 +85,10 @@ export default function ProjectDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.heroSection}>
           <Text style={styles.title}>{project.title}</Text>
-          <Text style={styles.desc}>{project.desc}</Text>
+          <Text style={styles.desc}>{project.description}</Text>
           <View style={styles.xpBadge}>
             <MaterialCommunityIcons name="sword-cross" size={16} color="#0F172A" />
-            <Text style={styles.xpText}>+{project.xp} XP</Text>
+            <Text style={styles.xpText}>+{project.xp_reward} XP</Text>
           </View>
         </View>
 

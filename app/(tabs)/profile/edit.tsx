@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,18 +7,68 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { userApi } from '@/src/api/user.api';
 
 export default function EditProfileScreen() {
-  const [name, setName] = useState('Rizki Pratama');
-  const [email, setEmail] = useState('rizki@example.com');
-  const [bio, setBio] = useState('Frontend developer pemula yang sedang belajar React Native.');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [bio, setBio] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSave = () => {
-    router.back();
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await userApi.getProfile();
+      setName(data.name || '');
+      setEmail(data.email || '');
+      setBio(data.bio || '');
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat profil');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+      await userApi.updateProfile({ name, email, bio });
+      router.back();
+    } catch (err: any) {
+      setError(err.message || 'Gagal menyimpan profil');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profil</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -27,11 +77,21 @@ export default function EditProfileScreen() {
           <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profil</Text>
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-          <Text style={styles.saveBtnText}>Simpan</Text>
+        <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+          {saving ? (
+            <ActivityIndicator size="small" color="#0F172A" />
+          ) : (
+            <Text style={styles.saveBtnText}>Simpan</Text>
+          )}
         </TouchableOpacity>
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {error && (
+          <View style={{ backgroundColor: '#7F1D1D', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+            <Text style={{ color: '#FCA5A5', fontSize: 13 }}>{error}</Text>
+          </View>
+        )}
+
         <View style={styles.avatarSection}>
           <View style={styles.avatar}>
             <MaterialCommunityIcons name="account" size={48} color="#475569" />

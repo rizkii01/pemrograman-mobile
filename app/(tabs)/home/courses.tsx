@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,22 +7,38 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { courseApi, Course } from '@/src/api/course.api';
 
 const categories = ['Semua', 'Frontend', 'Backend', 'Mobile', 'UI/UX', 'Database'];
-const courses = [
-  { id: 1, title: 'HTML & CSS Dasar', desc: 'Fundamental web development', lessons: 12, progress: '100%', color: '#38BDF8' },
-  { id: 2, title: 'JavaScript Modern (ES6+)', desc: 'Dari var ke arrow function', lessons: 8, progress: '62%', color: '#F59E0B' },
-  { id: 3, title: 'React Native Pemula', desc: 'Membangun aplikasi mobile', lessons: 10, progress: '30%', color: '#10B981' },
-  { id: 4, title: 'Node.js & Express', desc: 'Backend API development', lessons: 8, progress: '15%', color: '#A78BFA' },
-  { id: 5, title: 'UI/UX Design Dasar', desc: 'Prinsip desain & prototyping', lessons: 6, progress: '0%', color: '#EC4899' },
-  { id: 6, title: 'Database dengan PostgreSQL', desc: 'SQL & database design', lessons: 7, progress: '0%', color: '#06B6D4' },
-];
 
 export default function CoursesScreen() {
   const [activeCategory, setActiveCategory] = React.useState('Semua');
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const category = activeCategory === 'Semua' ? undefined : activeCategory;
+    courseApi.getAll(category)
+      .then(setCourses)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [activeCategory]);
+
+  const getProgressPercent = (course: Course) => {
+    if (course.completed != null && course.lesson_count) {
+      return Math.round((course.completed / course.lesson_count) * 100);
+    }
+    return 0;
+  };
+
+  const getColor = (course: Course) => course.color || '#38BDF8';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -57,30 +73,43 @@ export default function CoursesScreen() {
           ))}
         </ScrollView>
 
-        {courses.map((course) => (
-          <TouchableOpacity
-            key={course.id}
-            style={styles.courseCard}
-            activeOpacity={0.8}
-            onPress={() => router.push(`/(tabs)/home/course/${course.id}`)}
-          >
-            <View style={[styles.courseAccent, { backgroundColor: course.color }]} />
-            <View style={styles.courseInfo}>
-              <Text style={styles.courseTitle}>{course.title}</Text>
-              <Text style={styles.courseDesc}>{course.desc}</Text>
-              <View style={styles.courseMeta}>
-                <MaterialCommunityIcons name="play-box-multiple" size={16} color="#64748B" />
-                <Text style={styles.courseMetaText}>{course.lessons} materi</Text>
-              </View>
-            </View>
-            <View style={styles.courseProgress}>
-              <Text style={[styles.courseProgressText, { color: course.color }]}>{course.progress}</Text>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: course.progress as any, backgroundColor: course.color }]} />
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+        {loading ? (
+          <ActivityIndicator size="large" color="#38BDF8" style={{ marginTop: 40 }} />
+        ) : error ? (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+            <Text style={{ color: '#EF4444', fontSize: 14, marginTop: 12 }}>{error}</Text>
+          </View>
+        ) : (
+          courses.map((course) => {
+            const progress = getProgressPercent(course);
+            const color = getColor(course);
+            return (
+              <TouchableOpacity
+                key={course.id}
+                style={styles.courseCard}
+                activeOpacity={0.8}
+                onPress={() => router.push(`/(tabs)/home/course/${course.id}`)}
+              >
+                <View style={[styles.courseAccent, { backgroundColor: color }]} />
+                <View style={styles.courseInfo}>
+                  <Text style={styles.courseTitle}>{course.title}</Text>
+                  <Text style={styles.courseDesc}>{course.description}</Text>
+                  <View style={styles.courseMeta}>
+                    <MaterialCommunityIcons name="play-box-multiple" size={16} color="#64748B" />
+                    <Text style={styles.courseMetaText}>{course.lesson_count} materi</Text>
+                  </View>
+                </View>
+                <View style={styles.courseProgress}>
+                  <Text style={[styles.courseProgressText, { color }]}>{progress}%</Text>
+                  <View style={styles.progressBar}>
+                    <View style={[styles.progressFill, { width: `${progress}%` as any, backgroundColor: color }]} />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,31 +7,107 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-
-const discussionData: Record<string, {
-  author: string; role: string; time: string; title: string; body: string;
-  comments: { author: string; role: string; time: string; text: string }[]
-}> = {
-  '1': {
-    author: 'Alex Supriadi',
-    role: 'UI/UX Design',
-    time: '2 jam yang lalu',
-    title: 'Ada yang tahu kombinasi font bagus untuk portofolio?',
-    body: 'Lagi bikin portofolio studi kasus nih. Bagusnya pakai Inter + Playfair Display atau Montserrat + Roboto ya? Butuh saran dari teman-teman yang sudah berpengalaman di UI/UX.',
-    comments: [
-      { author: 'Rina', role: 'UI/UX Designer', time: '1 jam lalu', text: 'Inter + Playfair Display lebih aman untuk portofolio. Inter untuk body text, Playfair untuk heading. Memberikan kesan profesional dan elegan.' },
-      { author: 'Dimas', role: 'Frontend Dev', time: '45 menit lalu', text: 'Setuju sama Rina. Atau kalau mau lebih modern, coba Manrope + DM Sans. Light weight-nya bagus.' },
-      { author: 'Sari', role: 'Graphic Designer', time: '30 menit lalu', text: 'Jangan lupa perhatikan pairing contrast-nya ya. Tes di Google Fonts dulu sebelum apply.' },
-    ],
-  },
-};
+import { communityApi, Post, Comment } from '@/src/api/community.api';
 
 export default function DiscussionScreen() {
   const { id } = useLocalSearchParams();
-  const data = discussionData[id as string] || discussionData['1'];
+  const [post, setPost] = useState<(Post & { comments: Comment[] }) | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [liked, setLiked] = useState(false);
+
+  useEffect(() => {
+    loadPost();
+  }, [id]);
+
+  const loadPost = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await communityApi.getPostById(Number(id));
+      setPost(data);
+      setLiked(data.liked ?? false);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat diskusi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!replyText.trim()) return;
+    try {
+      setSubmitting(true);
+      const newComment = await communityApi.addComment(Number(id), replyText.trim());
+      if (post) {
+        setPost({ ...post, comments: [...post.comments, newComment] });
+      }
+      setReplyText('');
+    } catch (err: any) {
+      alert(err.message || 'Gagal menambahkan balasan');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleLike = async () => {
+    try {
+      const result = await communityApi.toggleLike(Number(id));
+      setLiked(result.liked);
+      if (post) {
+        setPost({
+          ...post,
+          likes_count: result.liked ? post.likes_count + 1 : post.likes_count - 1,
+        });
+      }
+    } catch (err: any) {
+      alert(err.message || 'Gagal memberikan like');
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Diskusi</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !post) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Diskusi</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error || 'Diskusi tidak ditemukan'}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadPost}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -49,28 +125,36 @@ export default function DiscussionScreen() {
               <MaterialCommunityIcons name="account" size={20} color="#94A3B8" />
             </View>
             <View>
-              <Text style={styles.authorName}>{data.author}</Text>
-              <Text style={styles.postTime}>{data.time} • {data.role}</Text>
+              <Text style={styles.authorName}>{post.author}</Text>
+              <Text style={styles.postTime}>{post.created_at} • {post.role}</Text>
             </View>
           </View>
-          <Text style={styles.postTitle}>{data.title}</Text>
-          <Text style={styles.postBody}>{data.body}</Text>
+          <Text style={styles.postTitle}>{post.title}</Text>
+          <Text style={styles.postBody}>{post.body}</Text>
+          <TouchableOpacity style={styles.likeBtn} onPress={handleToggleLike}>
+            <MaterialCommunityIcons
+              name={liked ? 'thumb-up' : 'thumb-up-outline'}
+              size={18}
+              color={liked ? '#38BDF8' : '#64748B'}
+            />
+            <Text style={[styles.likeText, liked && { color: '#38BDF8' }]}>{post.likes_count}</Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.commentSectionTitle}>{data.comments.length} Balasan</Text>
+        <Text style={styles.commentSectionTitle}>{post.comments.length} Balasan</Text>
 
-        {data.comments.map((comment, i) => (
-          <View key={i} style={styles.commentCard}>
+        {post.comments.map((comment) => (
+          <View key={comment.id} style={styles.commentCard}>
             <View style={styles.commentHeader}>
               <View style={styles.commentAvatar}>
                 <MaterialCommunityIcons name="account" size={16} color="#64748B" />
               </View>
               <View>
                 <Text style={styles.commentAuthor}>{comment.author}</Text>
-                <Text style={styles.commentTime}>{comment.time}</Text>
+                <Text style={styles.commentTime}>{comment.created_at}</Text>
               </View>
             </View>
-            <Text style={styles.commentText}>{comment.text}</Text>
+            <Text style={styles.commentText}>{comment.body}</Text>
           </View>
         ))}
 
@@ -80,9 +164,15 @@ export default function DiscussionScreen() {
             placeholder="Tulis balasan..."
             placeholderTextColor="#64748B"
             multiline
+            value={replyText}
+            onChangeText={setReplyText}
           />
-          <TouchableOpacity style={styles.replyBtn}>
-            <MaterialCommunityIcons name="send" size={18} color="#0F172A" />
+          <TouchableOpacity style={[styles.replyBtn, submitting && { opacity: 0.6 }]} onPress={handleAddComment} disabled={submitting}>
+            {submitting ? (
+              <ActivityIndicator size="small" color="#0F172A" />
+            ) : (
+              <MaterialCommunityIcons name="send" size={18} color="#0F172A" />
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -102,6 +192,8 @@ const styles = StyleSheet.create({
   postTime: { color: '#64748B', fontSize: 11, marginTop: 2 },
   postTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 8 },
   postBody: { color: '#CBD5E1', fontSize: 14, lineHeight: 22 },
+  likeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  likeText: { color: '#64748B', fontSize: 13, fontWeight: '500' },
   commentSectionTitle: { fontSize: 16, fontWeight: '700', color: '#CBD5E1', marginBottom: 16 },
   commentCard: { backgroundColor: '#1E293B', padding: 14, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#334155' },
   commentHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },

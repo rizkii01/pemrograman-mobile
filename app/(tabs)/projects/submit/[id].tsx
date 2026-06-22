@@ -7,22 +7,35 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { projectApi } from '@/src/api/project.api';
 
 export default function SubmitProjectScreen() {
   const { id } = useLocalSearchParams();
   const [link, setLink] = useState('');
   const [note, setNote] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!link) {
       alert('Harap masukkan link proyek kamu!');
       return;
     }
-    setSubmitted(true);
+    try {
+      setSubmitting(true);
+      setError(null);
+      await projectApi.submit(Number(id), link, note || undefined);
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message || 'Gagal mengirim proyek');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -54,6 +67,12 @@ export default function SubmitProjectScreen() {
         <View style={{ width: 24 }} />
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {error && (
+          <View style={{ backgroundColor: '#7F1D1D', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+            <Text style={{ color: '#FCA5A5', fontSize: 13 }}>{error}</Text>
+          </View>
+        )}
+
         <Text style={styles.sectionTitle}>Link Proyek</Text>
         <Text style={styles.hint}>
           Upload proyekmu ke GitHub Pages, Netlify, atau platform hosting lainnya.
@@ -84,9 +103,13 @@ export default function SubmitProjectScreen() {
           />
         </View>
 
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="send" size={20} color="#0F172A" />
-          <Text style={styles.submitBtnText}>Kirim Proyek</Text>
+        <TouchableOpacity style={[styles.submitBtn, submitting && { opacity: 0.6 }]} onPress={handleSubmit} activeOpacity={0.8} disabled={submitting}>
+          {submitting ? (
+            <ActivityIndicator size="small" color="#0F172A" />
+          ) : (
+            <MaterialCommunityIcons name="send" size={20} color="#0F172A" />
+          )}
+          <Text style={styles.submitBtnText}>{submitting ? 'Mengirim...' : 'Kirim Proyek'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

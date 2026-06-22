@@ -1,0 +1,24 @@
+import { Router } from 'express';
+import * as ctrl from '../controllers/course.controller';
+import { authMiddleware, optionalAuth } from '../middleware/auth';
+
+const router = Router();
+router.get('/', ctrl.getCourses);
+router.get('/:id', ctrl.getCourseById);
+router.post('/', authMiddleware, ctrl.createCourse);
+router.put('/:id', authMiddleware, ctrl.updateCourse);
+router.delete('/:id', authMiddleware, ctrl.deleteCourse);
+router.get('/:id/modules', ctrl.getModules);
+router.get('/:id/modules/:mid', ctrl.getModuleById);
+router.post('/:id/modules', authMiddleware, ctrl.createModule);
+router.put('/:id/modules/:mid', authMiddleware, ctrl.updateModule);
+router.delete('/:id/modules/:mid', authMiddleware, ctrl.deleteModule);
+router.post('/:id/enroll', authMiddleware, ctrl.enroll);
+router.delete('/:id/enroll', authMiddleware, ctrl.unenroll);
+router.post('/progress', authMiddleware, ctrl.updateProgress);
+router.get('/quiz/:courseId', ctrl.getQuiz);
+router.post('/quiz/:courseId/submit', authMiddleware, ctrl.submitQuiz);
+router.post('/quiz', authMiddleware, ctrl.createQuiz);
+router.put('/quiz/:id', authMiddleware, ctrl.updateQuiz);
+router.delete('/quiz/:id', authMiddleware, ctrl.deleteQuiz);
+export default router;

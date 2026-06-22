@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,48 +6,74 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-
-const courseData: Record<string, { title: string; desc: string; color: string; modules: { title: string; duration: string; done: boolean }[] }> = {
-  '1': {
-    title: 'HTML & CSS Dasar',
-    desc: 'Pelajari fundamental web development mulai dari struktur HTML hingga styling dengan CSS. Cocok untuk pemula yang ingin membangun website pertamanya.',
-    color: '#38BDF8',
-    modules: [
-      { title: 'Pengenalan HTML', duration: '15 menit', done: true },
-      { title: 'Tag & Elemen HTML', duration: '20 menit', done: true },
-      { title: 'CSS Selectors & Properties', duration: '25 menit', done: true },
-      { title: 'Flexbox & Grid', duration: '30 menit', done: true },
-      { title: 'Responsive Design', duration: '25 menit', done: false },
-      { title: 'Project: Landing Page', duration: '45 menit', done: false },
-    ],
-  },
-  '2': {
-    title: 'JavaScript Modern (ES6+)',
-    desc: 'Kuasai JavaScript modern dari dasar hingga mahir. Materi mencakup ES6+, asynchronous programming, dan studi kasus nyata.',
-    color: '#F59E0B',
-    modules: [
-      { title: 'Variabel & Tipe Data', duration: '15 menit', done: true },
-      { title: 'Function & Arrow Function', duration: '20 menit', done: true },
-      { title: 'Array & Object', duration: '25 menit', done: true },
-      { title: 'DOM Manipulation', duration: '30 menit', done: true },
-      { title: 'Async/Await & Fetch API', duration: '25 menit', done: true },
-      { title: 'ES6 Modules', duration: '20 menit', done: false },
-      { title: 'Studi Kasus: Todo App', duration: '40 menit', done: false },
-      { title: 'Final Project', duration: '60 menit', done: false },
-    ],
-  },
-};
+import { courseApi, Course, Module } from '@/src/api/course.api';
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams();
-  const course = courseData[id as string] || courseData['1'];
+  const courseId = Number(id);
 
-  const completedModules = course.modules.filter((m) => m.done).length;
-  const totalModules = course.modules.length;
-  const progress = Math.round((completedModules / totalModules) * 100);
+  const [course, setCourse] = useState<(Course & { modules: Module[] }) | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [completingModule, setCompletingModule] = useState<number | null>(null);
+
+  useEffect(() => {
+    courseApi.getById(courseId)
+      .then(setCourse)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [courseId]);
+
+  const handleCompleteModule = async (module: Module) => {
+    setCompletingModule(module.id);
+    try {
+      await courseApi.updateProgress(module.id);
+      setCourse((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          modules: prev.modules.map((m) =>
+            m.id === module.id ? m : m
+          ),
+        };
+      });
+    } catch {
+      // silently fail or show error
+    } finally {
+      setCompletingModule(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', fontSize: 16, marginTop: 12 }}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const courseData = course!;
+  const color = courseData.color || '#38BDF8';
+  const completedModules = courseData.modules.filter((m) => (m as any).done).length;
+  const totalModules = courseData.modules.length;
+  const progress = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -56,52 +82,66 @@ export default function CourseDetailScreen() {
           <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
         </TouchableOpacity>
 
-        <View style={[styles.heroIcon, { backgroundColor: course.color + '20' }]}>
-          <MaterialCommunityIcons name="book-open-variant" size={64} color={course.color} />
+        <View style={[styles.heroIcon, { backgroundColor: color + '20' }]}>
+          <MaterialCommunityIcons name="book-open-variant" size={64} color={color} />
         </View>
 
-        <Text style={styles.title}>{course.title}</Text>
-        <Text style={styles.desc}>{course.desc}</Text>
+        <Text style={styles.title}>{courseData.title}</Text>
+        <Text style={styles.desc}>{courseData.description}</Text>
 
         <View style={styles.progressCard}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressTitle}>Progress Belajar</Text>
-            <Text style={[styles.progressPercent, { color: course.color }]}>{progress}%</Text>
+            <Text style={[styles.progressPercent, { color }]}>{progress}%</Text>
           </View>
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: (progress + '%') as any, backgroundColor: course.color }]} />
+            <View style={[styles.progressFill, { width: (progress + '%') as any, backgroundColor: color }]} />
           </View>
           <Text style={styles.progressDetail}>{completedModules} dari {totalModules} materi selesai</Text>
         </View>
 
         <Text style={styles.sectionTitle}>Modul Pembelajaran</Text>
 
-        {course.modules.map((module, i) => (
-          <TouchableOpacity
-            key={i}
-            style={styles.moduleItem}
-            activeOpacity={0.8}
-            onPress={() => router.push(`/(tabs)/home/lesson/${id}?module=${i}`)}
-          >
-            <View style={[styles.moduleIcon, module.done ? styles.moduleDone : styles.modulePending]}>
-              <MaterialCommunityIcons
-                name={module.done ? 'check' : 'play'}
-                size={16}
-                color={module.done ? '#0F172A' : course.color}
-              />
-            </View>
-            <View style={styles.moduleInfo}>
-              <Text style={[styles.moduleTitle, module.done && styles.moduleTitleDone]}>
-                {module.title}
-              </Text>
-              <Text style={styles.moduleDuration}>{module.duration}</Text>
-            </View>
-            {module.done && <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />}
-          </TouchableOpacity>
-        ))}
+        {courseData.modules.map((module, i) => {
+          const isDone = (module as any).done || false;
+          const isCompleting = completingModule === module.id;
+          return (
+            <TouchableOpacity
+              key={module.id}
+              style={styles.moduleItem}
+              activeOpacity={0.8}
+              onPress={() => {
+                if (!isDone) {
+                  handleCompleteModule(module);
+                } else {
+                  router.push(`/(tabs)/home/lesson/${id}?module=${i}`);
+                }
+              }}
+            >
+              <View style={[styles.moduleIcon, isDone ? styles.moduleDone : styles.modulePending]}>
+                {isCompleting ? (
+                  <ActivityIndicator size="small" color={isDone ? '#0F172A' : color} />
+                ) : (
+                  <MaterialCommunityIcons
+                    name={isDone ? 'check' : 'play'}
+                    size={16}
+                    color={isDone ? '#0F172A' : color}
+                  />
+                )}
+              </View>
+              <View style={styles.moduleInfo}>
+                <Text style={[styles.moduleTitle, isDone && styles.moduleTitleDone]}>
+                  {module.title}
+                </Text>
+                <Text style={styles.moduleDuration}>{module.duration}</Text>
+              </View>
+              {isDone && <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />}
+            </TouchableOpacity>
+          );
+        })}
 
         <TouchableOpacity
-          style={[styles.startBtn, { backgroundColor: course.color }]}
+          style={[styles.startBtn, { backgroundColor: color }]}
           activeOpacity={0.8}
           onPress={() => router.push(`/(tabs)/home/lesson/${id}?module=${completedModules}`)}
         >

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,19 +6,11 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
-  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const resources = [
-  { id: 1, title: 'Belajar HTML dalam 1 Jam', type: 'Ebook', author: 'SkillUps', downloads: 1240, color: '#38BDF8' },
-  { id: 2, title: 'CSS Cheatsheet Lengkap', type: 'PDF', author: 'Frontend Masters', downloads: 980, color: '#A78BFA' },
-  { id: 3, title: 'JavaScript: The Good Parts', type: 'Ebook', author: 'Douglas Crockford', downloads: 2100, color: '#F59E0B' },
-  { id: 4, title: 'React Native Documentation', type: 'Link', author: 'Meta', downloads: 3500, color: '#10B981' },
-  { id: 5, title: 'Desain Sistem Figma Kit', type: 'File', author: 'Design Community', downloads: 760, color: '#EC4899' },
-  { id: 6, title: 'API Testing dengan Postman', type: 'Guide', author: 'Postman', downloads: 540, color: '#06B6D4' },
-];
+import { libraryApi, Resource } from '@/src/api/library.api';
 
 const typeIcon: Record<string, string> = {
   Ebook: 'book-open-variant',
@@ -29,6 +21,59 @@ const typeIcon: Record<string, string> = {
 };
 
 export default function LibraryScreen() {
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadResources();
+  }, []);
+
+  const loadResources = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await libraryApi.getResources();
+      setResources(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat referensi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Perpustakaan</Text>
+          <Text style={styles.subtitle}>Referensi dan sumber belajar</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Perpustakaan</Text>
+          <Text style={styles.subtitle}>Referensi dan sumber belajar</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadResources}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -68,8 +113,8 @@ export default function LibraryScreen() {
             activeOpacity={0.8}
             onPress={() => router.push(`/(tabs)/library/${resource.id}`)}
           >
-            <View style={[styles.resourceIcon, { backgroundColor: resource.color + '20' }]}>
-              <MaterialCommunityIcons name={(typeIcon[resource.type] || 'file') as any} size={24} color={resource.color} />
+            <View style={[styles.resourceIcon, { backgroundColor: (resource.color || '#38BDF8') + '20' }]}>
+              <MaterialCommunityIcons name={(typeIcon[resource.type] || 'file') as any} size={24} color={resource.color || '#38BDF8'} />
             </View>
             <View style={styles.resourceInfo}>
               <Text style={styles.resourceTitle}>{resource.title}</Text>

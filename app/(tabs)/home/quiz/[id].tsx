@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,51 +6,62 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-
-const quizData: Record<string, { questions: { q: string; options: string[]; correct: number }[] }> = {
-  '1': {
-    questions: [
-      { q: 'Apa kepanjangan dari HTML?', options: ['Hyper Text Markup Language', 'High Tech Modern Language', 'Home Tool Markup Language', 'Hyper Transfer Markup Language'], correct: 0 },
-      { q: 'Tag HTML mana yang digunakan untuk membuat heading terbesar?', options: ['<head>', '<h6>', '<h1>', '<header>'], correct: 2 },
-      { q: 'Property CSS apa yang digunakan untuk mengatur warna teks?', options: ['background-color', 'color', 'font-color', 'text-color'], correct: 1 },
-      { q: 'Apa fungsi dari CSS Flexbox?', options: ['Membuat animasi', 'Mengatur layout responsif', 'Menyambung ke database', 'Membuat form'], correct: 1 },
-    ],
-  },
-  '2': {
-    questions: [
-      { q: 'Keyword apa yang digunakan untuk mendeklarasikan variabel di ES6?', options: ['var', 'let & const', 'int', 'string'], correct: 1 },
-      { q: 'Method array mana yang digunakan untuk memfilter data?', options: ['map()', 'filter()', 'reduce()', 'forEach()'], correct: 1 },
-      { q: 'Apa output dari: console.log(typeof "Hello")?', options: ['string', 'number', 'object', 'undefined'], correct: 0 },
-      { q: 'Arrow function ditulis dengan simbol apa?', options: ['=>', '->', '::', '=|>'], correct: 0 },
-    ],
-  },
-};
+import { courseApi, Quiz } from '@/src/api/course.api';
 
 export default function QuizScreen() {
   const { id } = useLocalSearchParams();
-  const quiz = quizData[id as string] || quizData['1'];
+  const courseId = Number(id);
+
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    courseApi.getQuiz(courseId)
+      .then(setQuiz)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [courseId]);
 
   const handleAnswer = (idx: number) => {
     if (selected !== null) return;
     setSelected(idx);
-    if (idx === quiz.questions[currentQ].correct) {
+    setAnswers((prev) => [...prev, idx]);
+    if (quiz && idx === quiz.questions[currentQ].correct_index) {
       setScore(score + 1);
     }
   };
 
   const handleNext = () => {
+    if (!quiz) return;
     if (currentQ < quiz.questions.length - 1) {
       setCurrentQ(currentQ + 1);
       setSelected(null);
     } else {
       setShowResult(true);
+      submitAnswers();
+    }
+  };
+
+  const submitAnswers = async () => {
+    setSubmitting(true);
+    try {
+      await courseApi.submitQuiz(courseId, answers);
+    } catch {
+      // silently fail
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -59,27 +70,50 @@ export default function QuizScreen() {
     setSelected(null);
     setScore(0);
     setShowResult(false);
+    setAnswers([]);
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', fontSize: 16, marginTop: 12 }}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (showResult) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.resultContainer}>
+          {submitting && <ActivityIndicator size="small" color="#38BDF8" style={{ marginBottom: 16 }} />}
           <MaterialCommunityIcons
-            name={score >= quiz.questions.length / 2 ? 'trophy' : 'school-outline'}
+            name={score >= quiz!.questions.length / 2 ? 'trophy' : 'school-outline'}
             size={80}
-            color={score >= quiz.questions.length / 2 ? '#F59E0B' : '#38BDF8'}
+            color={score >= quiz!.questions.length / 2 ? '#F59E0B' : '#38BDF8'}
           />
           <Text style={styles.resultTitle}>
-            {score >= quiz.questions.length / 2 ? 'Selamat!' : 'Terus Belajar!'}
+            {score >= quiz!.questions.length / 2 ? 'Selamat!' : 'Terus Belajar!'}
           </Text>
           <Text style={styles.resultScore}>
-            {score} / {quiz.questions.length}
+            {score} / {quiz!.questions.length}
           </Text>
           <Text style={styles.resultDesc}>
-            {score === quiz.questions.length
+            {score === quiz!.questions.length
               ? 'Sempurna! Kamu menguasai materi ini dengan baik.'
-              : score >= quiz.questions.length / 2
+              : score >= quiz!.questions.length / 2
               ? 'Hasil yang bagus! Review kembali jawaban yang salah.'
               : 'Jangan menyerah! Pelajari ulang materi dan coba lagi.'}
           </Text>
@@ -95,7 +129,7 @@ export default function QuizScreen() {
     );
   }
 
-  const question = quiz.questions[currentQ];
+  const question = quiz!.questions[currentQ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -104,23 +138,23 @@ export default function QuizScreen() {
           <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Kuis</Text>
-        <Text style={styles.headerCounter}>{currentQ + 1}/{quiz.questions.length}</Text>
+        <Text style={styles.headerCounter}>{currentQ + 1}/{quiz!.questions.length}</Text>
       </View>
 
       <View style={styles.progressStrip}>
-        <View style={[styles.progressFillStrip, { width: (((currentQ + 1) / quiz.questions.length) * 100 + '%') as any }]} />
+        <View style={[styles.progressFillStrip, { width: (((currentQ + 1) / quiz!.questions.length) * 100 + '%') as any }]} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.questionText}>{question.q}</Text>
+        <Text style={styles.questionText}>{question.question_text}</Text>
 
         {question.options.map((opt, i) => (
           <TouchableOpacity
             key={i}
             style={[
               styles.optionBtn,
-              selected === i && i === question.correct && styles.optionCorrect,
-              selected === i && i !== question.correct && styles.optionWrong,
+              selected === i && i === question.correct_index && styles.optionCorrect,
+              selected === i && i !== question.correct_index && styles.optionWrong,
               selected !== null && selected !== i && styles.optionDim,
             ]}
             onPress={() => handleAnswer(i)}
@@ -134,9 +168,9 @@ export default function QuizScreen() {
             <Text style={[styles.optionText, selected === i && { color: '#FFFFFF' }]}>{opt}</Text>
             {selected === i && (
               <MaterialCommunityIcons
-                name={i === question.correct ? 'check-circle' : 'close-circle'}
+                name={i === question.correct_index ? 'check-circle' : 'close-circle'}
                 size={20}
-                color={i === question.correct ? '#10B981' : '#EF4444'}
+                color={i === question.correct_index ? '#10B981' : '#EF4444'}
               />
             )}
           </TouchableOpacity>
@@ -145,7 +179,7 @@ export default function QuizScreen() {
         {selected !== null && (
           <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
             <Text style={styles.nextBtnText}>
-              {currentQ < quiz.questions.length - 1 ? 'Soal Selanjutnya' : 'Lihat Hasil'}
+              {currentQ < quiz!.questions.length - 1 ? 'Soal Selanjutnya' : 'Lihat Hasil'}
             </Text>
             <MaterialCommunityIcons name="arrow-right" size={20} color="#0F172A" />
           </TouchableOpacity>

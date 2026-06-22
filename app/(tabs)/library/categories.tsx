@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,24 +6,72 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const categories = [
-  { name: 'HTML & CSS', icon: 'language-html5', color: '#38BDF8', count: 12 },
-  { name: 'JavaScript', icon: 'language-javascript', color: '#F59E0B', count: 15 },
-  { name: 'TypeScript', icon: 'language-typescript', color: '#3B82F6', count: 8 },
-  { name: 'React', icon: 'react', color: '#10B981', count: 10 },
-  { name: 'React Native', icon: 'cellphone', color: '#6366F1', count: 9 },
-  { name: 'Node.js', icon: 'nodejs', color: '#84CC16', count: 7 },
-  { name: 'Database', icon: 'database', color: '#06B6D4', count: 6 },
-  { name: 'UI/UX Design', icon: 'palette', color: '#EC4899', count: 5 },
-  { name: 'Git & GitHub', icon: 'git', color: '#F97316', count: 4 },
-  { name: 'Tools & DevOps', icon: 'tools', color: '#A78BFA', count: 5 },
-];
+import { libraryApi, Category } from '@/src/api/library.api';
 
 export default function CategoriesScreen() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await libraryApi.getCategories();
+      setCategories(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat kategori');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Kategori</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Kategori</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadCategories}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -36,12 +84,12 @@ export default function CategoriesScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.grid}>
           {categories.map((cat, i) => (
-            <TouchableOpacity key={i} style={styles.categoryCard} activeOpacity={0.8}>
-              <View style={[styles.categoryIcon, { backgroundColor: cat.color + '20' }]}>
-                <MaterialCommunityIcons name={cat.icon as any} size={28} color={cat.color} />
+            <TouchableOpacity key={cat.id || i} style={styles.categoryCard} activeOpacity={0.8}>
+              <View style={[styles.categoryIcon, { backgroundColor: (cat.color || '#38BDF8') + '20' }]}>
+                <MaterialCommunityIcons name={(cat.icon || 'folder') as any} size={28} color={cat.color || '#38BDF8'} />
               </View>
               <Text style={styles.categoryName}>{cat.name}</Text>
-              <Text style={styles.categoryCount}>{cat.count} referensi</Text>
+              <Text style={styles.categoryCount}>{cat.resource_count} referensi</Text>
             </TouchableOpacity>
           ))}
         </View>

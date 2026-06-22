@@ -9,21 +9,35 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useAuth } from '@/src/hooks/useAuth';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
-      alert('Harap isi semua kolom!');
+      setError('Harap isi semua kolom!');
       return;
     }
-    router.replace('/(tabs)/(home)');
+    setLoading(true);
+    setError('');
+    try {
+      await login(email, password);
+      router.replace('/(tabs)/home');
+    } catch (e: any) {
+      setError(e.message || 'Login gagal');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -35,7 +49,7 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => router.replace('/landing')}
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -44,6 +58,13 @@ export default function LoginScreen() {
             <Text style={styles.title}>Selamat Datang Kembali!</Text>
             <Text style={styles.subtitle}>Masuk untuk melanjutkan roadmap belajarmu.</Text>
           </View>
+
+          {error ? (
+            <View style={styles.errorBox}>
+              <MaterialCommunityIcons name="alert-circle" size={18} color="#FCA5A5" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.form}>
             <Text style={styles.label}>Email</Text>
@@ -85,8 +106,17 @@ export default function LoginScreen() {
               <Text style={styles.forgotPasswordText}>Lupa Password?</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.buttonPrimary} onPress={handleLogin} activeOpacity={0.8}>
-              <Text style={styles.buttonTextPrimary}>Masuk</Text>
+            <TouchableOpacity
+              style={[styles.buttonPrimary, loading && { opacity: 0.7 }]}
+              onPress={handleLogin}
+              activeOpacity={0.8}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#0F172A" />
+              ) : (
+                <Text style={styles.buttonTextPrimary}>Masuk</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -109,6 +139,8 @@ const styles = StyleSheet.create({
   header: { marginTop: 32, marginBottom: 32 },
   title: { fontSize: 28, fontWeight: '800', color: '#FFFFFF', marginBottom: 8 },
   subtitle: { fontSize: 14, color: '#94A3B8', lineHeight: 20 },
+  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#450A0A', padding: 12, borderRadius: 10, marginBottom: 16, gap: 8, borderWidth: 1, borderColor: '#7F1D1D' },
+  errorText: { color: '#FCA5A5', fontSize: 13, flex: 1 },
   form: { marginBottom: 24 },
   label: { fontSize: 14, fontWeight: '600', color: '#CBD5E1', marginBottom: 8, marginTop: 16 },
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderRadius: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: '#334155', height: 56 },

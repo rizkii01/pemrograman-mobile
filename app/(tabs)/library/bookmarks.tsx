@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,17 +6,85 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const bookmarks = [
-  { id: 1, title: 'JavaScript: The Good Parts', type: 'Ebook', savedAt: '2 hari lalu', color: '#F59E0B' },
-  { id: 2, title: 'CSS Cheatsheet Lengkap', type: 'PDF', savedAt: '5 hari lalu', color: '#A78BFA' },
-  { id: 3, title: 'React Native Documentation', type: 'Link', savedAt: '1 minggu lalu', color: '#10B981' },
-];
+import { libraryApi, Bookmark } from '@/src/api/library.api';
 
 export default function BookmarksScreen() {
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadBookmarks();
+  }, []);
+
+  const loadBookmarks = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await libraryApi.getBookmarks();
+      setBookmarks(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat bookmark');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveBookmark = async (resourceId: number) => {
+    try {
+      await libraryApi.removeBookmark(resourceId);
+      setBookmarks(prev => prev.filter(bm => bm.id !== resourceId));
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus bookmark');
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Tersimpan</Text>
+          <TouchableOpacity>
+            <MaterialCommunityIcons name="delete-outline" size={24} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Tersimpan</Text>
+          <TouchableOpacity>
+            <MaterialCommunityIcons name="delete-outline" size={24} color="#EF4444" />
+          </TouchableOpacity>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadBookmarks}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -37,14 +105,16 @@ export default function BookmarksScreen() {
               activeOpacity={0.8}
               onPress={() => router.push(`/(tabs)/library/${bm.id}`)}
             >
-              <View style={[styles.bookmarkIcon, { backgroundColor: bm.color + '20' }]}>
-                <MaterialCommunityIcons name="bookmark" size={20} color={bm.color} />
+              <View style={[styles.bookmarkIcon, { backgroundColor: (bm.color || '#38BDF8') + '20' }]}>
+                <MaterialCommunityIcons name="bookmark" size={20} color={bm.color || '#38BDF8'} />
               </View>
               <View style={styles.bookmarkInfo}>
                 <Text style={styles.bookmarkTitle}>{bm.title}</Text>
-                <Text style={styles.bookmarkMeta}>{bm.type} • Disimpan {bm.savedAt}</Text>
+                <Text style={styles.bookmarkMeta}>{bm.type} • Disimpan {bm.saved_at}</Text>
               </View>
-              <MaterialCommunityIcons name="close" size={18} color="#475569" />
+              <TouchableOpacity onPress={() => handleRemoveBookmark(bm.id)}>
+                <MaterialCommunityIcons name="close" size={18} color="#475569" />
+              </TouchableOpacity>
             </TouchableOpacity>
           ))
         ) : (

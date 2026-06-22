@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,50 +6,34 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const projects = [
-  {
-    id: 1,
-    title: 'Membuat Landing Page Responsive',
-    desc: 'Gunakan HTML semantik dan CSS Flexbox/Grid agar tampilan rapi di mobile & desktop.',
-    xp: 150,
-    due: 'Besok',
-    status: 'active',
-    color: '#F59E0B',
-  },
-  {
-    id: 2,
-    title: 'Aplikasi Todo-List dengan DOM JavaScript',
-    desc: 'Manipulasi DOM untuk menambah, menghapus, dan mencentang tugas.',
-    xp: 200,
-    due: '3 hari lagi',
-    status: 'submitted',
-    color: '#3B82F6',
-  },
-  {
-    id: 3,
-    title: 'Website Portofolio Pribadi',
-    desc: 'Bangun website portofolio responsif dengan HTML, CSS, dan JavaScript.',
-    xp: 250,
-    due: '1 minggu lagi',
-    status: 'active',
-    color: '#10B981',
-  },
-  {
-    id: 4,
-    title: 'API Sederhana dengan Node.js',
-    desc: 'Buat REST API dengan Express.js dan hubungkan ke database.',
-    xp: 300,
-    due: '2 minggu lagi',
-    status: 'locked',
-    color: '#64748B',
-  },
-];
+import { projectApi, Project } from '@/src/api/project.api';
 
 export default function ProjectListScreen() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await projectApi.getAll();
+      setProjects(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat proyek');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderBadge = (status: string) => {
     if (status === 'submitted') {
       return <Text style={[styles.badge, { backgroundColor: '#1E3A8A', color: '#93C5FD' }]}>UNDER REVIEW</Text>;
@@ -60,6 +44,44 @@ export default function ProjectListScreen() {
     return <Text style={[styles.badge, { backgroundColor: '#7F1D1D', color: '#FCA5A5' }]}>DUE {projects.find(p => p.status === 'active')?.due?.toUpperCase()}</Text>;
   };
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Tugas & Proyek</Text>
+          <Text style={styles.subtitle}>Selesaikan proyek untuk portofolio kerjamu</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+          <Text style={{ color: '#94A3B8', marginTop: 12 }}>Memuat proyek...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Tugas & Proyek</Text>
+          <Text style={styles.subtitle}>Selesaikan proyek untuk portofolio kerjamu</Text>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadProjects}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const activeCount = projects.filter(p => p.status === 'active').length;
+  const reviewCount = projects.filter(p => p.status === 'submitted').length;
+  const doneCount = projects.filter(p => p.status === 'completed').length;
+  const totalXp = projects.reduce((sum, p) => sum + p.xp_reward, 0);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -69,19 +91,19 @@ export default function ProjectListScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>3</Text>
+            <Text style={styles.statNumber}>{activeCount}</Text>
             <Text style={styles.statLabel}>Aktif</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>2</Text>
+            <Text style={styles.statNumber}>{reviewCount}</Text>
             <Text style={styles.statLabel}>Review</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>5</Text>
+            <Text style={styles.statNumber}>{doneCount}</Text>
             <Text style={styles.statLabel}>Selesai</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>950</Text>
+            <Text style={styles.statNumber}>{totalXp}</Text>
             <Text style={styles.statLabel}>Total XP</Text>
           </View>
         </View>
@@ -102,11 +124,11 @@ export default function ProjectListScreen() {
               {renderBadge(project.status)}
             </View>
             <Text style={styles.projectTitle}>{project.title}</Text>
-            <Text style={styles.projectDesc}>{project.desc}</Text>
+            <Text style={styles.projectDesc}>{project.description}</Text>
             <View style={styles.cardFooter}>
               <View style={styles.xpInfo}>
                 <MaterialCommunityIcons name="sword-cross" size={16} color="#F59E0B" />
-                <Text style={styles.xpText}>+{project.xp} XP</Text>
+                <Text style={styles.xpText}>+{project.xp_reward} XP</Text>
               </View>
               {project.status === 'active' && (
                 <TouchableOpacity style={styles.actionBtn}>

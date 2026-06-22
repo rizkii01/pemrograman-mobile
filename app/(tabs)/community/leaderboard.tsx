@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,20 +6,11 @@ import {
   ScrollView,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-const rankings = [
-  { rank: 1, name: 'Rizki', xp: 4850, badge: 'gold', level: 'Expert' },
-  { rank: 2, name: 'Sari Dewi', xp: 4200, badge: 'silver', level: 'Expert' },
-  { rank: 3, name: 'Dimas Ardian', xp: 3980, badge: 'bronze', level: 'Advanced' },
-  { rank: 4, name: 'Maya Putri', xp: 3650, badge: 'none', level: 'Advanced' },
-  { rank: 5, name: 'Alex Supriadi', xp: 3210, badge: 'none', level: 'Intermediate' },
-  { rank: 6, name: 'Bambang', xp: 2980, badge: 'none', level: 'Intermediate' },
-  { rank: 7, name: 'Citra Lestari', xp: 2750, badge: 'none', level: 'Intermediate' },
-  { rank: 8, name: 'Rina Wijaya', xp: 2420, badge: 'none', level: 'Beginner' },
-];
+import { communityApi, LeaderboardEntry } from '@/src/api/community.api';
 
 const badgeIcon = (badge: string) => {
   switch (badge) {
@@ -31,6 +22,65 @@ const badgeIcon = (badge: string) => {
 };
 
 export default function LeaderboardScreen() {
+  const [rankings, setRankings] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadLeaderboard();
+  }, []);
+
+  const loadLeaderboard = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await communityApi.getLeaderboard();
+      setRankings(data);
+    } catch (err: any) {
+      setError(err.message || 'Gagal memuat leaderboard');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Peringkat</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#38BDF8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Peringkat</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#EF4444" />
+          <Text style={{ color: '#EF4444', marginTop: 12, textAlign: 'center' }}>{error}</Text>
+          <TouchableOpacity style={{ marginTop: 16, backgroundColor: '#1E293B', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 }} onPress={loadLeaderboard}>
+            <Text style={{ color: '#38BDF8', fontWeight: '600' }}>Coba Lagi</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
