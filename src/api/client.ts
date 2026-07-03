@@ -1,7 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 const getBaseUrl = () => {
+  const debuggerHost = Constants.expoConfig?.hostUri;
+  if (debuggerHost) {
+    const localhost = debuggerHost.split(':')[0];
+    return `http://${localhost}:5000/api`;
+  }
   if (Platform.OS === 'android') return 'http://10.0.2.2:5000/api';
   return 'http://localhost:5000/api';
 };
