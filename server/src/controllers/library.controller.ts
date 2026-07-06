@@ -1,20 +1,26 @@
 import { Request, Response } from 'express';
-import pool from '../config/database';
+import { supabaseAdmin } from '../config/supabase';
 import { AuthRequest } from '../middleware/auth';
+import { lookupUserId } from '../utils/user';
 
 export const getResources = async (req: Request, res: Response) => {
   try {
     const { category_id } = req.query;
-    let query = 'SELECT r.*, c.name as category_name FROM resources r LEFT JOIN categories c ON r.category_id = c.id';
-    const params: any[] = [];
+    let query = supabaseAdmin
+      .from('resources')
+      .select('*, categories!left(name)');
     if (category_id) {
-      query += ' WHERE r.category_id = $1';
-      params.push(category_id);
+      query = query.eq('category_id', category_id);
     }
-    query += ' ORDER BY r.downloads DESC';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const { data, error } = await query.order('downloads', { ascending: false });
+    if (error) throw error;
+    const mapped = data?.map(r => ({
+      ...r,
+      category_name: (r.categories as any)?.name,
+    })) || [];
+    res.json(mapped);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -22,12 +28,15 @@ export const getResources = async (req: Request, res: Response) => {
 export const getResourceById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      'SELECT r.*, c.name as category_name FROM resources r LEFT JOIN categories c ON r.category_id = c.id WHERE r.id = $1', [id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Resource tidak ditemukan' });
-    res.json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('resources')
+      .select('*, categories!left(name)')
+      .eq('id', id)
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Resource tidak ditemukan' });
+    res.json({ ...data, category_name: (data.categories as any)?.name });
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -35,12 +44,22 @@ export const getResourceById = async (req: Request, res: Response) => {
 export const createResource = async (req: AuthRequest, res: Response) => {
   try {
     const { title, type, author, description, content, downloads, category_id, color } = req.body;
-    const result = await pool.query(
-      'INSERT INTO resources (title, type, author, description, content, downloads, category_id, color) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-      [title, type, author, description || '', content || '', downloads || 0, category_id, color || '#38BDF8']
-    );
-    res.status(201).json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('resources')
+      .insert({
+        title, type, author,
+        description: description || '',
+        content: content || '',
+        downloads: downloads || 0,
+        category_id,
+        color: color || '#38BDF8',
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -49,13 +68,26 @@ export const updateResource = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { title, type, author, description, content, downloads, category_id, color } = req.body;
-    const result = await pool.query(
-      'UPDATE resources SET title = COALESCE($1, title), type = COALESCE($2, type), author = COALESCE($3, author), description = COALESCE($4, description), content = COALESCE($5, content), downloads = COALESCE($6, downloads), category_id = COALESCE($7, category_id), color = COALESCE($8, color) WHERE id = $9 RETURNING *',
-      [title, type, author, description, content, downloads, category_id, color, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Resource tidak ditemukan' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (title !== undefined) updateData.title = title;
+    if (type !== undefined) updateData.type = type;
+    if (author !== undefined) updateData.author = author;
+    if (description !== undefined) updateData.description = description;
+    if (content !== undefined) updateData.content = content;
+    if (downloads !== undefined) updateData.downloads = downloads;
+    if (category_id !== undefined) updateData.category_id = category_id;
+    if (color !== undefined) updateData.color = color;
+
+    const { data, error } = await supabaseAdmin
+      .from('resources')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Resource tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -63,10 +95,16 @@ export const updateResource = async (req: AuthRequest, res: Response) => {
 export const deleteResource = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM resources WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Resource tidak ditemukan' });
+    const { data, error } = await supabaseAdmin
+      .from('resources')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Resource tidak ditemukan' });
     res.json({ message: 'Resource berhasil dihapus' });
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -75,21 +113,29 @@ export const searchResources = async (req: Request, res: Response) => {
   try {
     const { q } = req.query;
     if (!q) return res.json([]);
-    const result = await pool.query(
-      'SELECT id, title, type, color FROM resources WHERE LOWER(title) LIKE LOWER($1) ORDER BY downloads DESC',
-      [`%${q}%`]
-    );
-    res.json(result.rows);
+    const { data, error } = await supabaseAdmin
+      .from('resources')
+      .select('id, title, type, color')
+      .ilike('title', `%${q}%`)
+      .order('downloads', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const getCategories = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM categories ORDER BY resource_count DESC');
-    res.json(result.rows);
+    const { data, error } = await supabaseAdmin
+      .from('categories')
+      .select('*')
+      .order('resource_count', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -97,12 +143,15 @@ export const getCategories = async (req: Request, res: Response) => {
 export const createCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { name, icon, color } = req.body;
-    const result = await pool.query(
-      'INSERT INTO categories (name, icon, color) VALUES ($1, $2, $3) RETURNING *',
-      [name, icon, color || '#38BDF8']
-    );
-    res.status(201).json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('categories')
+      .insert({ name, icon, color: color || '#38BDF8' })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -111,13 +160,21 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, icon, color } = req.body;
-    const result = await pool.query(
-      'UPDATE categories SET name = COALESCE($1, name), icon = COALESCE($2, icon), color = COALESCE($3, color) WHERE id = $4 RETURNING *',
-      [name, icon, color, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Kategori tidak ditemukan' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (name !== undefined) updateData.name = name;
+    if (icon !== undefined) updateData.icon = icon;
+    if (color !== undefined) updateData.color = color;
+
+    const { data, error } = await supabaseAdmin
+      .from('categories')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Kategori tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -125,64 +182,108 @@ export const updateCategory = async (req: AuthRequest, res: Response) => {
 export const deleteCategory = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM categories WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Kategori tidak ditemukan' });
+    const { data, error } = await supabaseAdmin
+      .from('categories')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Kategori tidak ditemukan' });
     res.json({ message: 'Kategori berhasil dihapus' });
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const getBookmarks = async (req: AuthRequest, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT r.id, r.title, r.type, r.color, b.saved_at FROM user_bookmarks b
-       JOIN resources r ON b.resource_id = r.id WHERE b.user_id = $1 ORDER BY b.saved_at DESC`,
-      [req.userId]
-    );
-    res.json(result.rows);
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    const { data, error } = await supabaseAdmin
+      .from('user_bookmarks')
+      .select('saved_at, resources!inner(id, title, type, color)')
+      .eq('user_id', localId)
+      .order('saved_at', { ascending: false });
+
+    if (error) throw error;
+    const mapped = data?.map(b => ({
+      id: (b.resources as any)?.id,
+      title: (b.resources as any)?.title,
+      type: (b.resources as any)?.type,
+      color: (b.resources as any)?.color,
+      saved_at: b.saved_at,
+    })) || [];
+    res.json(mapped);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const addBookmark = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { resource_id } = req.body;
-    await pool.query(
-      'INSERT INTO user_bookmarks (user_id, resource_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [req.userId, resource_id]
-    );
+    await supabaseAdmin
+      .from('user_bookmarks')
+      .insert({ user_id: localId, resource_id })
+      .maybeSingle();
     res.json({ message: 'Bookmark ditambahkan' });
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const removeBookmark = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
-    await pool.query('DELETE FROM user_bookmarks WHERE user_id = $1 AND resource_id = $2', [req.userId, id]);
+    await supabaseAdmin
+      .from('user_bookmarks')
+      .delete()
+      .eq('user_id', localId)
+      .eq('resource_id', id);
     res.json({ message: 'Bookmark dihapus' });
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const getAchievements = async (req: AuthRequest, res: Response) => {
   try {
-    const result = await pool.query('SELECT achievement_key, earned_at FROM user_achievements WHERE user_id = $1', [req.userId]);
-    res.json(result.rows);
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+    const { data, error } = await supabaseAdmin
+      .from('user_achievements')
+      .select('achievement_key, earned_at')
+      .eq('user_id', localId);
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const getFaqs = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM faqs ORDER BY sort_order');
-    res.json(result.rows);
+    const { data, error } = await supabaseAdmin
+      .from('faqs')
+      .select('*')
+      .order('sort_order');
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -190,12 +291,15 @@ export const getFaqs = async (req: Request, res: Response) => {
 export const createFaq = async (req: AuthRequest, res: Response) => {
   try {
     const { question, answer, sort_order } = req.body;
-    const result = await pool.query(
-      'INSERT INTO faqs (question, answer, sort_order) VALUES ($1, $2, $3) RETURNING *',
-      [question, answer, sort_order || 0]
-    );
-    res.status(201).json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('faqs')
+      .insert({ question, answer, sort_order: sort_order || 0 })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -204,13 +308,21 @@ export const updateFaq = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { question, answer, sort_order } = req.body;
-    const result = await pool.query(
-      'UPDATE faqs SET question = COALESCE($1, question), answer = COALESCE($2, answer), sort_order = COALESCE($3, sort_order) WHERE id = $4 RETURNING *',
-      [question, answer, sort_order, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'FAQ tidak ditemukan' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (question !== undefined) updateData.question = question;
+    if (answer !== undefined) updateData.answer = answer;
+    if (sort_order !== undefined) updateData.sort_order = sort_order;
+
+    const { data, error } = await supabaseAdmin
+      .from('faqs')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'FAQ tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -218,10 +330,16 @@ export const updateFaq = async (req: AuthRequest, res: Response) => {
 export const deleteFaq = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM faqs WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'FAQ tidak ditemukan' });
+    const { data, error } = await supabaseAdmin
+      .from('faqs')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'FAQ tidak ditemukan' });
     res.json({ message: 'FAQ berhasil dihapus' });
   } catch (e) {
+    console.error('[library.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };

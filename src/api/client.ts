@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
@@ -18,17 +18,17 @@ let token: string | null = null;
 
 export const setToken = (t: string | null) => {
   token = t;
-  if (t) AsyncStorage.setItem('token', t);
-  else AsyncStorage.removeItem('token');
-};
-
-export const loadToken = async () => {
-  const t = await AsyncStorage.getItem('token');
-  if (t) token = t;
-  return t;
 };
 
 export const getToken = () => token;
+
+export const refreshTokenFromSession = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    token = session.access_token;
+  }
+  return token;
+};
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string>;

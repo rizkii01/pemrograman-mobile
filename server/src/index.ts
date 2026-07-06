@@ -1,6 +1,13 @@
+import 'express-async-errors';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Validasi env vars wajib sebelum memuat config yang bergantung padanya
+import './config/supabase'; // akan throw jika SUPABASE_URL / SERVICE_ROLE_KEY kosong
+
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
 import courseRoutes from './routes/course.routes';
@@ -8,7 +15,6 @@ import projectRoutes from './routes/project.routes';
 import communityRoutes from './routes/community.routes';
 import libraryRoutes from './routes/library.routes';
 
-dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -36,4 +42,6 @@ app.use('*', (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`SkillUps API running on port ${PORT}`);
+  console.log(`Supabase URL: ${process.env.SUPABASE_URL}`);
 });
+

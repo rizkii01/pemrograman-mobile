@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '../lib/supabase';
 import { authApi, User } from '../api/auth.api';
-import { setToken, loadToken, getToken } from '../api/client';
+import { setToken, refreshTokenFromSession } from '../api/client';
 
 interface AuthContextType {
   user: User | null;
@@ -28,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const token = await loadToken();
+      const token = await refreshTokenFromSession();
       if (token) {
         try {
           const userData = await authApi.getMe();
@@ -39,6 +40,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setIsLoading(false);
     })();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setToken(null);
+        setUser(null);
+      } else if (session?.access_token) {
+        setToken(session.access_token);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -53,13 +65,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.user);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setToken(null);
     setUser(null);
   };
 
   const refreshUser = async () => {
-    if (getToken()) {
+    const token = await refreshTokenFromSession();
+    if (token) {
       try {
         const userData = await authApi.getMe();
         setUser(userData);

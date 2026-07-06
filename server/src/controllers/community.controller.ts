@@ -1,15 +1,24 @@
 import { Request, Response } from 'express';
-import pool from '../config/database';
+import { supabaseAdmin } from '../config/supabase';
 import { AuthRequest } from '../middleware/auth';
+import { lookupUserId } from '../utils/user';
 
 export const getPosts = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      `SELECT d.*, u.name as author, u.level as role FROM discussions d
-       JOIN users u ON d.user_id = u.id ORDER BY d.created_at DESC`
-    );
-    res.json(result.rows);
+    const { data, error } = await supabaseAdmin
+      .from('discussions')
+      .select('*, users!inner(name, level)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    const mapped = data?.map(d => ({
+      ...d,
+      author: (d.users as any)?.name,
+      role: (d.users as any)?.level,
+    })) || [];
+    res.json(mapped);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -17,110 +26,183 @@ export const getPosts = async (req: Request, res: Response) => {
 export const getPostById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const post = await pool.query(
-      `SELECT d.*, u.name as author, u.level as role FROM discussions d
-       JOIN users u ON d.user_id = u.id WHERE d.id = $1`, [id]
-    );
-    if (post.rows.length === 0) return res.status(404).json({ error: 'Postingan tidak ditemukan' });
-    const comments = await pool.query(
-      `SELECT dc.*, u.name as author, u.level as role FROM discussion_comments dc
-       JOIN users u ON dc.user_id = u.id WHERE dc.discussion_id = $1 ORDER BY dc.created_at`,
-      [id]
-    );
-    res.json({ ...post.rows[0], comments: comments.rows });
+    const { data: post, error: postError } = await supabaseAdmin
+      .from('discussions')
+      .select('*, users!inner(name, level)')
+      .eq('id', id)
+      .single();
+
+    if (postError || !post) return res.status(404).json({ error: 'Postingan tidak ditemukan' });
+
+    const { data: comments } = await supabaseAdmin
+      .from('discussion_comments')
+      .select('*, users!inner(name, level)')
+      .eq('discussion_id', id)
+      .order('created_at');
+
+    const mappedComments = comments?.map(c => ({
+      ...c,
+      author: (c.users as any)?.name,
+      role: (c.users as any)?.level,
+    })) || [];
+
+    res.json({
+      ...post,
+      author: (post.users as any)?.name,
+      role: (post.users as any)?.level,
+      comments: mappedComments,
+    });
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const createPost = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { category, title, body } = req.body;
     if (!title || !body) return res.status(400).json({ error: 'Judul dan isi wajib diisi' });
-    const result = await pool.query(
-      'INSERT INTO discussions (user_id, category, title, body) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.userId, category || 'Diskusi', title, body]
-    );
-    res.status(201).json(result.rows[0]);
+
+    const { data, error } = await supabaseAdmin
+      .from('discussions')
+      .insert({ user_id: localId, category: category || 'Diskusi', title, body })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const updatePost = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
     const { title, body, category } = req.body;
-    const result = await pool.query(
-      'UPDATE discussions SET title = COALESCE($1, title), body = COALESCE($2, body), category = COALESCE($3, category) WHERE id = $4 AND user_id = $5 RETURNING *',
-      [title, body, category, id, req.userId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Postingan tidak ditemukan atau bukan milik Anda' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (title !== undefined) updateData.title = title;
+    if (body !== undefined) updateData.body = body;
+    if (category !== undefined) updateData.category = category;
+
+    const { data, error } = await supabaseAdmin
+      .from('discussions')
+      .update(updateData)
+      .eq('id', id)
+      .eq('user_id', localId)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Postingan tidak ditemukan atau bukan milik Anda' });
+    res.json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const deletePost = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM discussions WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.userId]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Postingan tidak ditemukan atau bukan milik Anda' });
+    const { data, error } = await supabaseAdmin
+      .from('discussions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', localId)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Postingan tidak ditemukan atau bukan milik Anda' });
     res.json({ message: 'Postingan berhasil dihapus' });
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const toggleLike = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
-    const existing = await pool.query(
-      'SELECT * FROM discussion_likes WHERE user_id = $1 AND discussion_id = $2',
-      [req.userId, id]
-    );
-    if (existing.rows.length > 0) {
-      await pool.query('DELETE FROM discussion_likes WHERE user_id = $1 AND discussion_id = $2', [req.userId, id]);
-      await pool.query('UPDATE discussions SET likes_count = likes_count - 1 WHERE id = $1', [id]);
+    const { data: existing } = await supabaseAdmin
+      .from('discussion_likes')
+      .select('*')
+      .eq('user_id', localId)
+      .eq('discussion_id', id)
+      .maybeSingle();
+
+    if (existing) {
+      await supabaseAdmin
+        .from('discussion_likes')
+        .delete()
+        .eq('user_id', localId)
+        .eq('discussion_id', id);
+      await supabaseAdmin.rpc('decrement_discussion_likes', { row_id: parseInt(String(id)) });
       res.json({ liked: false });
     } else {
-      await pool.query('INSERT INTO discussion_likes (user_id, discussion_id) VALUES ($1, $2)', [req.userId, id]);
-      await pool.query('UPDATE discussions SET likes_count = likes_count + 1 WHERE id = $1', [id]);
+      await supabaseAdmin
+        .from('discussion_likes')
+        .insert({ user_id: localId, discussion_id: id });
+      await supabaseAdmin.rpc('increment_discussion_likes', { row_id: parseInt(String(id)) });
       res.json({ liked: true });
     }
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const addComment = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
     const { body } = req.body;
     if (!body) return res.status(400).json({ error: 'Komentar wajib diisi' });
-    const result = await pool.query(
-      'INSERT INTO discussion_comments (discussion_id, user_id, body) VALUES ($1, $2, $3) RETURNING *',
-      [id, req.userId, body]
-    );
-    await pool.query('UPDATE discussions SET replies_count = replies_count + 1 WHERE id = $1', [id]);
-    res.status(201).json(result.rows[0]);
+
+    const { data, error } = await supabaseAdmin
+      .from('discussion_comments')
+      .insert({ discussion_id: id, user_id: localId, body })
+      .select()
+      .single();
+    if (error) throw error;
+
+    await supabaseAdmin.rpc('increment_discussion_replies', { row_id: parseInt(String(id)) });
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const updateComment = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
     const { body } = req.body;
-    const result = await pool.query(
-      'UPDATE discussion_comments SET body = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      [body, id, req.userId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Komentar tidak ditemukan atau bukan milik Anda' });
-    res.json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('discussion_comments')
+      .update({ body })
+      .eq('id', id)
+      .eq('user_id', localId)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Komentar tidak ditemukan atau bukan milik Anda' });
+    res.json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -128,38 +210,55 @@ export const updateComment = async (req: AuthRequest, res: Response) => {
 export const deleteComment = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const comment = await pool.query('SELECT * FROM discussion_comments WHERE id = $1', [id]);
-    if (comment.rows.length === 0) return res.status(404).json({ error: 'Komentar tidak ditemukan' });
-    await pool.query('DELETE FROM discussion_comments WHERE id = $1', [id]);
-    await pool.query('UPDATE discussions SET replies_count = replies_count - 1 WHERE id = $1', [comment.rows[0].discussion_id]);
+    const { data: comment } = await supabaseAdmin
+      .from('discussion_comments')
+      .select('discussion_id')
+      .eq('id', id)
+      .single();
+    if (!comment) return res.status(404).json({ error: 'Komentar tidak ditemukan' });
+
+    await supabaseAdmin.from('discussion_comments').delete().eq('id', id);
+    await supabaseAdmin.rpc('decrement_discussion_replies', { row_id: comment.discussion_id });
     res.json({ message: 'Komentar berhasil dihapus' });
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const getLeaderboard = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query(
-      'SELECT id, name, xp, level FROM users ORDER BY xp DESC LIMIT 10'
-    );
-    res.json(result.rows.map((u, i) => ({
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, name, xp, level')
+      .order('xp', { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+    const result = (data || []).map((u, i) => ({
       rank: i + 1,
       name: u.name,
       xp: u.xp,
       level: u.level,
-      badge: i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : 'none',
-    })));
+      badge: i === 0 ? 'gold' as const : i === 1 ? 'silver' as const : i === 2 ? 'bronze' as const : 'none' as const,
+    }));
+    res.json(result);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const getMentors = async (req: Request, res: Response) => {
   try {
-    const result = await pool.query('SELECT * FROM mentors ORDER BY rating DESC');
-    res.json(result.rows);
+    const { data, error } = await supabaseAdmin
+      .from('mentors')
+      .select('*')
+      .order('rating', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -167,10 +266,15 @@ export const getMentors = async (req: Request, res: Response) => {
 export const getMentorById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM mentors WHERE id = $1', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Mentor tidak ditemukan' });
-    res.json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('mentors')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Mentor tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -178,12 +282,22 @@ export const getMentorById = async (req: Request, res: Response) => {
 export const createMentor = async (req: AuthRequest, res: Response) => {
   try {
     const { name, role, expertise, students, rating, available } = req.body;
-    const result = await pool.query(
-      'INSERT INTO mentors (name, role, expertise, students, rating, available) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [name, role, JSON.stringify(expertise || []), students || 0, rating || 0, available !== false]
-    );
-    res.status(201).json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('mentors')
+      .insert({
+        name,
+        role,
+        expertise: expertise || [],
+        students: students || 0,
+        rating: rating || 0,
+        available: available !== false,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -192,13 +306,24 @@ export const updateMentor = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { name, role, expertise, students, rating, available } = req.body;
-    const result = await pool.query(
-      'UPDATE mentors SET name = COALESCE($1, name), role = COALESCE($2, role), expertise = COALESCE($3, expertise), students = COALESCE($4, students), rating = COALESCE($5, rating), available = COALESCE($6, available) WHERE id = $7 RETURNING *',
-      [name, role, expertise ? JSON.stringify(expertise) : null, students, rating, available, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Mentor tidak ditemukan' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (name !== undefined) updateData.name = name;
+    if (role !== undefined) updateData.role = role;
+    if (expertise !== undefined) updateData.expertise = expertise;
+    if (students !== undefined) updateData.students = students;
+    if (rating !== undefined) updateData.rating = rating;
+    if (available !== undefined) updateData.available = available;
+
+    const { data, error } = await supabaseAdmin
+      .from('mentors')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Mentor tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -206,10 +331,16 @@ export const updateMentor = async (req: AuthRequest, res: Response) => {
 export const deleteMentor = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM mentors WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Mentor tidak ditemukan' });
+    const { data, error } = await supabaseAdmin
+      .from('mentors')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Mentor tidak ditemukan' });
     res.json({ message: 'Mentor berhasil dihapus' });
   } catch (e) {
+    console.error('[community.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };

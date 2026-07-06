@@ -1,20 +1,20 @@
 import { Request, Response } from 'express';
-import pool from '../config/database';
+import { supabaseAdmin } from '../config/supabase';
 import { AuthRequest } from '../middleware/auth';
+import { lookupUserId } from '../utils/user';
 
 export const getCourses = async (req: Request, res: Response) => {
   try {
     const { category } = req.query;
-    let query = 'SELECT * FROM courses';
-    const params: any[] = [];
+    let query = supabaseAdmin.from('courses').select('*');
     if (category && category !== 'Semua') {
-      query += ' WHERE category = $1';
-      params.push(category);
+      query = query.eq('category', category as string);
     }
-    query += ' ORDER BY id';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const { data, error } = await query.order('id');
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -22,11 +22,22 @@ export const getCourses = async (req: Request, res: Response) => {
 export const getCourseById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const course = await pool.query('SELECT * FROM courses WHERE id = $1', [id]);
-    if (course.rows.length === 0) return res.status(404).json({ error: 'Kursus tidak ditemukan' });
-    const modules = await pool.query('SELECT * FROM modules WHERE course_id = $1 ORDER BY sort_order', [id]);
-    res.json({ ...course.rows[0], modules: modules.rows });
+    const { data: course, error: courseError } = await supabaseAdmin
+      .from('courses')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (courseError || !course) return res.status(404).json({ error: 'Kursus tidak ditemukan' });
+
+    const { data: modules } = await supabaseAdmin
+      .from('modules')
+      .select('*')
+      .eq('course_id', id)
+      .order('sort_order');
+
+    res.json({ ...course, modules: modules || [] });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -34,12 +45,15 @@ export const getCourseById = async (req: Request, res: Response) => {
 export const createCourse = async (req: AuthRequest, res: Response) => {
   try {
     const { title, description, category, color, lesson_count } = req.body;
-    const result = await pool.query(
-      'INSERT INTO courses (title, description, category, color, lesson_count) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [title, description, category, color || '#38BDF8', lesson_count || 0]
-    );
-    res.status(201).json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('courses')
+      .insert({ title, description, category, color: color || '#38BDF8', lesson_count: lesson_count || 0 })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -48,13 +62,23 @@ export const updateCourse = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { title, description, category, color, lesson_count } = req.body;
-    const result = await pool.query(
-      'UPDATE courses SET title = COALESCE($1, title), description = COALESCE($2, description), category = COALESCE($3, category), color = COALESCE($4, color), lesson_count = COALESCE($5, lesson_count) WHERE id = $6 RETURNING *',
-      [title, description, category, color, lesson_count, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Kursus tidak ditemukan' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (category !== undefined) updateData.category = category;
+    if (color !== undefined) updateData.color = color;
+    if (lesson_count !== undefined) updateData.lesson_count = lesson_count;
+
+    const { data, error } = await supabaseAdmin
+      .from('courses')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Kursus tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -62,10 +86,16 @@ export const updateCourse = async (req: AuthRequest, res: Response) => {
 export const deleteCourse = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('DELETE FROM courses WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Kursus tidak ditemukan' });
+    const { data, error } = await supabaseAdmin
+      .from('courses')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Kursus tidak ditemukan' });
     res.json({ message: 'Kursus berhasil dihapus' });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -73,9 +103,15 @@ export const deleteCourse = async (req: AuthRequest, res: Response) => {
 export const getModules = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const result = await pool.query('SELECT * FROM modules WHERE course_id = $1 ORDER BY sort_order', [id]);
-    res.json(result.rows);
+    const { data, error } = await supabaseAdmin
+      .from('modules')
+      .select('*')
+      .eq('course_id', id)
+      .order('sort_order');
+    if (error) throw error;
+    res.json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -83,10 +119,16 @@ export const getModules = async (req: Request, res: Response) => {
 export const getModuleById = async (req: Request, res: Response) => {
   try {
     const { id, mid } = req.params;
-    const result = await pool.query('SELECT * FROM modules WHERE course_id = $1 AND id = $2', [id, mid]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Modul tidak ditemukan' });
-    res.json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('modules')
+      .select('*')
+      .eq('course_id', id)
+      .eq('id', mid)
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Modul tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -95,12 +137,15 @@ export const createModule = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { title, duration, sort_order } = req.body;
-    const result = await pool.query(
-      'INSERT INTO modules (course_id, title, duration, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
-      [id, title, duration, sort_order || 0]
-    );
-    res.status(201).json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('modules')
+      .insert({ course_id: id, title, duration, sort_order: sort_order || 0 })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -109,13 +154,22 @@ export const updateModule = async (req: AuthRequest, res: Response) => {
   try {
     const { id, mid } = req.params;
     const { title, duration, sort_order } = req.body;
-    const result = await pool.query(
-      'UPDATE modules SET title = COALESCE($1, title), duration = COALESCE($2, duration), sort_order = COALESCE($3, sort_order) WHERE course_id = $4 AND id = $5 RETURNING *',
-      [title, duration, sort_order, id, mid]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Modul tidak ditemukan' });
-    res.json(result.rows[0]);
+    const updateData: Record<string, any> = {};
+    if (title !== undefined) updateData.title = title;
+    if (duration !== undefined) updateData.duration = duration;
+    if (sort_order !== undefined) updateData.sort_order = sort_order;
+
+    const { data, error } = await supabaseAdmin
+      .from('modules')
+      .update(updateData)
+      .eq('course_id', id)
+      .eq('id', mid)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Modul tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -123,43 +177,69 @@ export const updateModule = async (req: AuthRequest, res: Response) => {
 export const deleteModule = async (req: AuthRequest, res: Response) => {
   try {
     const { id, mid } = req.params;
-    const result = await pool.query('DELETE FROM modules WHERE course_id = $1 AND id = $2 RETURNING id', [id, mid]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Modul tidak ditemukan' });
+    const { data, error } = await supabaseAdmin
+      .from('modules')
+      .delete()
+      .eq('course_id', id)
+      .eq('id', mid)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Modul tidak ditemukan' });
     res.json({ message: 'Modul berhasil dihapus' });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const enroll = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
-    await pool.query('INSERT INTO user_enrollments (user_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.userId, id]);
+    await supabaseAdmin
+      .from('user_enrollments')
+      .insert({ user_id: localId, course_id: id })
+      .maybeSingle();
     res.json({ message: 'Berhasil mendaftar kursus' });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const unenroll = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { id } = req.params;
-    await pool.query('DELETE FROM user_enrollments WHERE user_id = $1 AND course_id = $2', [req.userId, id]);
+    await supabaseAdmin
+      .from('user_enrollments')
+      .delete()
+      .eq('user_id', localId)
+      .eq('course_id', id);
     res.json({ message: 'Berhasil membatalkan enrollment' });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 export const updateProgress = async (req: AuthRequest, res: Response) => {
   try {
+    const localId = await lookupUserId(req.userId!);
+    if (!localId) return res.status(404).json({ error: 'User tidak ditemukan' });
+
     const { module_id } = req.body;
-    await pool.query(
-      'INSERT INTO user_progress (user_id, module_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [req.userId, module_id]
-    );
+    await supabaseAdmin
+      .from('user_progress')
+      .insert({ user_id: localId, module_id })
+      .maybeSingle();
     res.json({ message: 'Progress updated' });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -167,11 +247,21 @@ export const updateProgress = async (req: AuthRequest, res: Response) => {
 export const getQuiz = async (req: Request, res: Response) => {
   try {
     const { courseId } = req.params;
-    const quiz = await pool.query('SELECT * FROM quizzes WHERE course_id = $1', [courseId]);
-    if (quiz.rows.length === 0) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
-    const questions = await pool.query('SELECT * FROM questions WHERE quiz_id = $1', [quiz.rows[0].id]);
-    res.json({ ...quiz.rows[0], questions: questions.rows });
+    const { data: quiz, error: quizError } = await supabaseAdmin
+      .from('quizzes')
+      .select('*')
+      .eq('course_id', courseId)
+      .single();
+    if (quizError || !quiz) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
+
+    const { data: questions } = await supabaseAdmin
+      .from('questions')
+      .select('*')
+      .eq('quiz_id', quiz.id);
+
+    res.json({ ...quiz, questions: questions || [] });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -180,15 +270,26 @@ export const submitQuiz = async (req: AuthRequest, res: Response) => {
   try {
     const { courseId } = req.params;
     const { answers } = req.body;
-    const quiz = await pool.query('SELECT * FROM quizzes WHERE course_id = $1', [courseId]);
-    if (quiz.rows.length === 0) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
-    const questions = await pool.query('SELECT * FROM questions WHERE quiz_id = $1', [quiz.rows[0].id]);
+
+    const { data: quiz, error: quizError } = await supabaseAdmin
+      .from('quizzes')
+      .select('*')
+      .eq('course_id', courseId)
+      .single();
+    if (quizError || !quiz) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
+
+    const { data: questions } = await supabaseAdmin
+      .from('questions')
+      .select('*')
+      .eq('quiz_id', quiz.id);
+
     let score = 0;
-    questions.rows.forEach((q, i) => {
+    (questions || []).forEach((q, i) => {
       if (answers[i] === q.correct_index) score++;
     });
-    res.json({ score, total: questions.rows.length });
+    res.json({ score, total: questions?.length || 0 });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -196,17 +297,28 @@ export const submitQuiz = async (req: AuthRequest, res: Response) => {
 export const createQuiz = async (req: AuthRequest, res: Response) => {
   try {
     const { course_id, title, questions } = req.body;
-    const quiz = await pool.query('INSERT INTO quizzes (course_id, title) VALUES ($1, $2) RETURNING *', [course_id, title]);
+    const { data: quiz, error } = await supabaseAdmin
+      .from('quizzes')
+      .insert({ course_id, title })
+      .select()
+      .single();
+    if (error) throw error;
+
     if (questions && questions.length > 0) {
-      for (const q of questions) {
-        await pool.query(
-          'INSERT INTO questions (quiz_id, question_text, options, correct_index) VALUES ($1, $2, $3, $4)',
-          [quiz.rows[0].id, q.question_text, JSON.stringify(q.options), q.correct_index]
-        );
-      }
+      const questionRows = questions.map((q: any) => ({
+        quiz_id: quiz.id,
+        question_text: q.question_text,
+        options: q.options,
+        correct_index: q.correct_index,
+      }));
+      const { error: qError } = await supabaseAdmin
+        .from('questions')
+        .insert(questionRows);
+      if (qError) throw qError;
     }
-    res.status(201).json(quiz.rows[0]);
+    res.status(201).json(quiz);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -215,10 +327,16 @@ export const updateQuiz = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { title } = req.body;
-    const result = await pool.query('UPDATE quizzes SET title = COALESCE($1, title) WHERE id = $2 RETURNING *', [title, id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
-    res.json(result.rows[0]);
+    const { data, error } = await supabaseAdmin
+      .from('quizzes')
+      .update({ title })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
+    res.json(data);
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -226,11 +344,17 @@ export const updateQuiz = async (req: AuthRequest, res: Response) => {
 export const deleteQuiz = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    await pool.query('DELETE FROM questions WHERE quiz_id = $1', [id]);
-    const result = await pool.query('DELETE FROM quizzes WHERE id = $1 RETURNING id', [id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
+    await supabaseAdmin.from('questions').delete().eq('quiz_id', id);
+    const { data, error } = await supabaseAdmin
+      .from('quizzes')
+      .delete()
+      .eq('id', id)
+      .select('id')
+      .single();
+    if (error || !data) return res.status(404).json({ error: 'Kuis tidak ditemukan' });
     res.json({ message: 'Kuis berhasil dihapus' });
   } catch (e) {
+    console.error('[course.controller] Error:', e);
     res.status(500).json({ error: 'Server error' });
   }
 };
