@@ -7,7 +7,7 @@ export const getPosts = async (req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('discussions')
-      .select('*, users!inner(name, level)')
+      .select('*, users!discussions_user_id_fkey!inner(name, level)')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -28,7 +28,7 @@ export const getPostById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { data: post, error: postError } = await supabaseAdmin
       .from('discussions')
-      .select('*, users!inner(name, level)')
+      .select('*, users!discussions_user_id_fkey!inner(name, level)')
       .eq('id', id)
       .single();
 
@@ -36,7 +36,7 @@ export const getPostById = async (req: Request, res: Response) => {
 
     const { data: comments } = await supabaseAdmin
       .from('discussion_comments')
-      .select('*, users!inner(name, level)')
+      .select('*, users!discussion_comments_user_id_fkey!inner(name, level)')
       .eq('discussion_id', id)
       .order('created_at');
 

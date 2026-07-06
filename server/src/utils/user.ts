@@ -9,7 +9,7 @@ export const lookupUserId = async (supabaseId: string): Promise<number | null> =
     .from('users')
     .select('id')
     .eq('supabase_id', supabaseId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('[lookupUserId] Error:', error.message);
